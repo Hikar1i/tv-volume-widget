@@ -7,15 +7,16 @@
 
 #include <memory>
 
-class AudioPlugin : public flutter::Plugin {
+class AudioPlugin {
  public:
-  static void RegisterWithRegistrar(flutter::PluginRegistrarWindows* registrar);
-
-  AudioPlugin(flutter::PluginRegistrarWindows* registrar);
+  static void RegisterWithRegistrar(
+      FlutterDesktopPluginRegistrarRef registrar);
 
   virtual ~AudioPlugin();
 
  private:
+  AudioPlugin(flutter::PluginRegistrarWindows* registrar);
+
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& method_call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
@@ -32,7 +33,7 @@ class AudioPlugin : public flutter::Plugin {
   // Helper
   std::string GetDeviceType(int form_factor, const std::wstring& name);
 
-  flutter::PluginRegistrarWindows* registrar_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
 };
 
 #endif  // AUDIO_PLUGIN_H_

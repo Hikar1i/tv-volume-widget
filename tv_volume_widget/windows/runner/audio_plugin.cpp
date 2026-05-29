@@ -11,10 +11,10 @@
 #include <flutter/method_channel.h>
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
+#include <flutter/plugin_registrar_manager.h>
 
 #include <memory>
 #include <sstream>
-#include <codecvt>
 #include <locale>
 
 #pragma comment(lib, "ole32.lib")
@@ -22,7 +22,6 @@
 #pragma comment(lib, "uuid.lib")
 
 // IPolicyConfig GUID for Windows 10/11
-// {870AF99C-171D-4F9E-AF0D-E63DF40C2BC9}
 static const GUID CLSID_PolicyConfigClient =
     {0x870AF99C, 0x171D, 0x4F9E, {0xAF, 0x0D, 0xE6, 0x3D, 0xF4, 0x0C, 0x2B, 0xC9}};
 
@@ -33,66 +32,49 @@ static const GUID IID_IPolicyConfig =
 MIDL_INTERFACE("870AF99C-171D-4F9E-AF0D-E63DF40C2BC9")
 IPolicyConfig : public IUnknown {
  public:
-  virtual HRESULT STDMETHODCALLTYPE GetMixFormat(
-      PCWSTR, WAVEFORMATEX**) = 0;
-  virtual HRESULT STDMETHODCALLTYPE GetDeviceFormat(
-      PCWSTR, INT, WAVEFORMATEX**) = 0;
+  virtual HRESULT STDMETHODCALLTYPE GetMixFormat(PCWSTR, WAVEFORMATEX**) = 0;
+  virtual HRESULT STDMETHODCALLTYPE GetDeviceFormat(PCWSTR, INT, WAVEFORMATEX**) = 0;
   virtual HRESULT STDMETHODCALLTYPE ResetDeviceFormat(PCWSTR) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SetDeviceFormat(
-      PCWSTR, WAVEFORMATEX*, WAVEFORMATEX*) = 0;
-  virtual HRESULT STDMETHODCALLTYPE GetProcessingPeriod(
-      PCWSTR, INT, PINT64, PINT64) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SetProcessingPeriod(
-      PCWSTR, PINT64) = 0;
-  virtual HRESULT STDMETHODCALLTYPE GetShareMode(
-      PCWSTR, struct DeviceShareMode*) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SetShareMode(
-      PCWSTR, struct DeviceShareMode*) = 0;
-  virtual HRESULT STDMETHODCALLTYPE GetPropertyValue(
-      PCWSTR, const PROPERTYKEY&, PROPVARIANT*) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SetPropertyValue(
-      PCWSTR, const PROPERTYKEY&, PROPVARIANT&) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SetDefaultEndpoint(
-      __in PCWSTR wszDeviceId, __in ERole eRole) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SetEndpointVisibility(
-      PCWSTR, INT) = 0;
+  virtual HRESULT STDMETHODCALLTYPE SetDeviceFormat(PCWSTR, WAVEFORMATEX*, WAVEFORMATEX*) = 0;
+  virtual HRESULT STDMETHODCALLTYPE GetProcessingPeriod(PCWSTR, INT, PINT64, PINT64) = 0;
+  virtual HRESULT STDMETHODCALLTYPE SetProcessingPeriod(PCWSTR, PINT64) = 0;
+  virtual HRESULT STDMETHODCALLTYPE GetShareMode(PCWSTR, struct DeviceShareMode*) = 0;
+  virtual HRESULT STDMETHODCALLTYPE SetShareMode(PCWSTR, struct DeviceShareMode*) = 0;
+  virtual HRESULT STDMETHODCALLTYPE GetPropertyValue(PCWSTR, const PROPERTYKEY&, PROPVARIANT*) = 0;
+  virtual HRESULT STDMETHODCALLTYPE SetPropertyValue(PCWSTR, const PROPERTYKEY&, PROPVARIANT&) = 0;
+  virtual HRESULT STDMETHODCALLTYPE SetDefaultEndpoint(PCWSTR wszDeviceId, ERole eRole) = 0;
+  virtual HRESULT STDMETHODCALLTYPE SetEndpointVisibility(PCWSTR, INT) = 0;
 };
 
-// EndpointFormFactor enum
-enum EndpointFormFactor {
-  RemoteNetworkDevice = 0,
-  Speakers = 1,
-  LineLevel = 2,
-  Headphones = 3,
-  Microphone = 4,
-  Headset = 5,
-  Handset = 6,
-  UnknownDigitalPassthrough = 7,
-  SPDIF = 8,
-  DigitalAudioDisplayDevice = 9,
-  UnknownFormFactor = 10,
-};
+// EndpointFormFactor values (from mmdeviceapi.h, may conflict with SDK enum)
+// Using anonymous enum to avoid redefinition
+static const int kFormFactor_Speakers = 1;
+static const int kFormFactor_LineLevel = 2;
+static const int kFormFactor_Headphones = 3;
+static const int kFormFactor_Headset = 5;
+static const int kFormFactor_SPDIF = 8;
+static const int kFormFactor_DigitalAudioDisplayDevice = 9;
 
 // Convert wide string to UTF-8
 static std::string WideStringToUtf8(const std::wstring& wide) {
   if (wide.empty()) return std::string();
-  int size_needed = WideCharToMultiByte(CP_UTF8, 0, &wide[0], (int)wide.size(),
-                                        NULL, 0, NULL, NULL);
-  std::string strTo(size_needed, 0);
-  WideCharToMultiByte(CP_UTF8, 0, &wide[0], (int)wide.size(), &strTo[0],
-                      size_needed, NULL, NULL);
-  return strTo;
+  int size_needed = WideCharToMultiByte(CP_UTF8, 0, wide.c_str(),
+                                        (int)wide.size(), NULL, 0, NULL, NULL);
+  std::string result(size_needed, 0);
+  WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), (int)wide.size(),
+                      &result[0], size_needed, NULL, NULL);
+  return result;
 }
 
 // Convert UTF-8 to wide string
 static std::wstring Utf8ToWideString(const std::string& utf8) {
   if (utf8.empty()) return std::wstring();
-  int size_needed = MultiByteToWideChar(CP_UTF8, 0, &utf8[0], (int)utf8.size(),
-                                        NULL, 0);
-  std::wstring wstrTo(size_needed, 0);
-  MultiByteToWideChar(CP_UTF8, 0, &utf8[0], (int)utf8.size(), &wstrTo[0],
-                      size_needed);
-  return wstrTo;
+  int size_needed = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(),
+                                        (int)utf8.size(), NULL, 0);
+  std::wstring result(size_needed, 0);
+  MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), (int)utf8.size(),
+                      &result[0], size_needed);
+  return result;
 }
 
 // Get string from property store
@@ -125,27 +107,45 @@ static UINT GetPropertyUint32Value(IPropertyStore* store,
   return result;
 }
 
+// ─── Registration ────────────────────────────────────────────────────────────
+
+static flutter::PluginRegistrarManager* g_plugin_registrar_manager = nullptr;
+
 void AudioPlugin::RegisterWithRegistrar(
-    flutter::PluginRegistrarWindows* registrar) {
+    FlutterDesktopPluginRegistrarRef registrar) {
+  if (!g_plugin_registrar_manager) {
+    g_plugin_registrar_manager = new flutter::PluginRegistrarManager();
+  }
+
+  auto* windows_registrar =
+      g_plugin_registrar_manager->GetRegistrar<flutter::PluginRegistrarWindows>(
+          registrar);
+
   auto channel =
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
-          registrar->messenger(), "com.tvvolumewidget/audio",
+          windows_registrar->messenger(), "com.tvvolumewidget/audio",
           &flutter::StandardMethodCodec::GetInstance());
 
-  auto plugin = std::make_unique<AudioPlugin>(registrar);
+  auto plugin = std::unique_ptr<AudioPlugin>(
+      new AudioPlugin(std::move(channel)));
 
   channel->SetMethodCallHandler(
       [plugin_pointer = plugin.get()](const auto& call, auto result) {
         plugin_pointer->HandleMethodCall(call, std::move(result));
       });
 
-  registrar->AddPlugin(std::move(plugin));
+  windows_registrar->AddPlugin(std::move(plugin));
 }
 
-AudioPlugin::AudioPlugin(flutter::PluginRegistrarWindows* registrar)
-    : registrar_(registrar) {}
+// ─── Constructor / Destructor ────────────────────────────────────────────────
+
+AudioPlugin::AudioPlugin(
+    std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel)
+    : channel_(std::move(channel)) {}
 
 AudioPlugin::~AudioPlugin() {}
+
+// ─── Method channel handler ─────────────────────────────────────────────────
 
 void AudioPlugin::HandleMethodCall(
     const flutter::MethodCall<flutter::EncodableValue>& method_call,
@@ -163,8 +163,7 @@ void AudioPlugin::HandleMethodCall(
       if (it != args->end()) {
         const std::string* device_id = std::get_if<std::string>(&it->second);
         if (device_id) {
-          bool success = SetDefaultDevice(*device_id);
-          result->Success(flutter::EncodableValue(success));
+          result->Success(flutter::EncodableValue(SetDefaultDevice(*device_id)));
           return;
         }
       }
@@ -177,8 +176,7 @@ void AudioPlugin::HandleMethodCall(
       if (it != args->end()) {
         const std::string* device_id = std::get_if<std::string>(&it->second);
         if (device_id) {
-          double volume = GetVolume(*device_id);
-          result->Success(flutter::EncodableValue(volume));
+          result->Success(flutter::EncodableValue(GetVolume(*device_id)));
           return;
         }
       }
@@ -193,8 +191,7 @@ void AudioPlugin::HandleMethodCall(
         const std::string* device_id = std::get_if<std::string>(&dev_it->second);
         const double* volume = std::get_if<double>(&vol_it->second);
         if (device_id && volume) {
-          bool success = SetVolume(*device_id, *volume);
-          result->Success(flutter::EncodableValue(success));
+          result->Success(flutter::EncodableValue(SetVolume(*device_id, *volume)));
           return;
         }
       }
@@ -207,8 +204,7 @@ void AudioPlugin::HandleMethodCall(
       if (it != args->end()) {
         const std::string* device_id = std::get_if<std::string>(&it->second);
         if (device_id) {
-          bool mute = GetMute(*device_id);
-          result->Success(flutter::EncodableValue(mute));
+          result->Success(flutter::EncodableValue(GetMute(*device_id)));
           return;
         }
       }
@@ -223,8 +219,7 @@ void AudioPlugin::HandleMethodCall(
         const std::string* device_id = std::get_if<std::string>(&dev_it->second);
         const bool* mute = std::get_if<bool>(&mute_it->second);
         if (device_id && mute) {
-          bool success = SetMute(*device_id, *mute);
-          result->Success(flutter::EncodableValue(success));
+          result->Success(flutter::EncodableValue(SetMute(*device_id, *mute)));
           return;
         }
       }
@@ -235,33 +230,31 @@ void AudioPlugin::HandleMethodCall(
   }
 }
 
+// ─── Device type detection ───────────────────────────────────────────────────
+
 std::string AudioPlugin::GetDeviceType(int form_factor,
                                          const std::wstring& name) {
   std::string lower_name = WideStringToUtf8(name);
-  // Convert to lowercase for comparison
-  for (auto& c : lower_name) c = tolower(c);
+  for (auto& c : lower_name) c = static_cast<char>(tolower(c));
 
-  // Check form factor first
   switch (form_factor) {
-    case DigitalAudioDisplayDevice:
+    case kFormFactor_DigitalAudioDisplayDevice:
       return "tv";
-    case Headphones:
+    case kFormFactor_Headphones:
       return "headphone";
-    case Headset:
+    case kFormFactor_Headset:
       return "headset";
-    case SPDIF:
+    case kFormFactor_SPDIF:
       return "digital";
-    case Speakers:
-      // Check name for additional clues
+    case kFormFactor_Speakers:
       if (lower_name.find("hdmi") != std::string::npos) return "tv";
       if (lower_name.find("display") != std::string::npos) return "tv";
       if (lower_name.find("bluetooth") != std::string::npos) return "bluetooth";
       if (lower_name.find("usb") != std::string::npos) return "usb";
       return "speaker";
-    case LineLevel:
+    case kFormFactor_LineLevel:
       return "speaker";
     default:
-      // Use name-based heuristics
       if (lower_name.find("hdmi") != std::string::npos) return "tv";
       if (lower_name.find("display") != std::string::npos) return "tv";
       if (lower_name.find("bluetooth") != std::string::npos) return "bluetooth";
@@ -272,18 +265,17 @@ std::string AudioPlugin::GetDeviceType(int form_factor,
   }
 }
 
+// ─── Audio device methods ────────────────────────────────────────────────────
+
 flutter::EncodableValue AudioPlugin::GetOutputDevices() {
   flutter::EncodableList devices;
-
-  HRESULT hr;
   IMMDeviceEnumerator* enumerator = nullptr;
   IMMDeviceCollection* collection = nullptr;
 
-  hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
-                        __uuidof(IMMDeviceEnumerator), (void**)&enumerator);
-  if (FAILED(hr) || !enumerator) {
-    return flutter::EncodableValue(devices);
-  }
+  HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
+                                __uuidof(IMMDeviceEnumerator),
+                                reinterpret_cast<void**>(&enumerator));
+  if (FAILED(hr) || !enumerator) return flutter::EncodableValue(devices);
 
   hr = enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &collection);
   if (FAILED(hr) || !collection) {
@@ -306,48 +298,40 @@ flutter::EncodableValue AudioPlugin::GetOutputDevices() {
 
     IPropertyStore* store = nullptr;
     device->OpenPropertyStore(STGM_READ, &store);
-    if (!store) {
-      device->Release();
-      continue;
-    }
+    if (!store) { device->Release(); continue; }
 
     std::wstring friendly_name = GetPropertyStringValue(store, PKEY_Device_FriendlyName);
     UINT form_factor = GetPropertyUint32Value(store, PKEY_AudioEndpoint_FormFactor);
 
-    std::string id_str = WideStringToUtf8(device_id);
-    std::string name_str = WideStringToUtf8(friendly_name);
-    std::string type_str = GetDeviceType(form_factor, friendly_name);
-
     flutter::EncodableMap device_map;
-    device_map[flutter::EncodableValue("id")] = flutter::EncodableValue(id_str);
-    device_map[flutter::EncodableValue("name")] = flutter::EncodableValue(name_str);
-    device_map[flutter::EncodableValue("type")] = flutter::EncodableValue(type_str);
+    device_map[flutter::EncodableValue("id")] =
+        flutter::EncodableValue(WideStringToUtf8(device_id));
+    device_map[flutter::EncodableValue("name")] =
+        flutter::EncodableValue(WideStringToUtf8(friendly_name));
+    device_map[flutter::EncodableValue("type")] =
+        flutter::EncodableValue(GetDeviceType(static_cast<int>(form_factor), friendly_name));
     device_map[flutter::EncodableValue("formFactor")] =
         flutter::EncodableValue(static_cast<int>(form_factor));
 
     devices.push_back(flutter::EncodableValue(device_map));
-
     store->Release();
     device->Release();
   }
 
   collection->Release();
   enumerator->Release();
-
   return flutter::EncodableValue(devices);
 }
 
 flutter::EncodableValue AudioPlugin::GetDefaultDevice() {
   flutter::EncodableMap result;
-
   IMMDeviceEnumerator* enumerator = nullptr;
   IMMDevice* device = nullptr;
 
   HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
-                                __uuidof(IMMDeviceEnumerator), (void**)&enumerator);
-  if (FAILED(hr) || !enumerator) {
-    return flutter::EncodableValue(result);
-  }
+                                __uuidof(IMMDeviceEnumerator),
+                                reinterpret_cast<void**>(&enumerator));
+  if (FAILED(hr) || !enumerator) return flutter::EncodableValue(result);
 
   hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device);
   if (FAILED(hr) || !device) {
@@ -371,14 +355,13 @@ flutter::EncodableValue AudioPlugin::GetDefaultDevice() {
     result[flutter::EncodableValue("name")] =
         flutter::EncodableValue(WideStringToUtf8(friendly_name));
     result[flutter::EncodableValue("type")] =
-        flutter::EncodableValue(GetDeviceType(form_factor, friendly_name));
+        flutter::EncodableValue(GetDeviceType(static_cast<int>(form_factor), friendly_name));
 
     store->Release();
   }
 
   device->Release();
   enumerator->Release();
-
   return flutter::EncodableValue(result);
 }
 
@@ -387,10 +370,9 @@ bool AudioPlugin::SetDefaultDevice(const std::string& device_id) {
 
   IPolicyConfig* policy_config = nullptr;
   HRESULT hr = CoCreateInstance(CLSID_PolicyConfigClient, NULL, CLSCTX_ALL,
-                                IID_IPolicyConfig, (void**)&policy_config);
-  if (FAILED(hr) || !policy_config) {
-    return false;
-  }
+                                IID_IPolicyConfig,
+                                reinterpret_cast<void**>(&policy_config));
+  if (FAILED(hr) || !policy_config) return false;
 
   hr = policy_config->SetDefaultEndpoint(wide_id.c_str(), eConsole);
   if (SUCCEEDED(hr)) {
@@ -403,47 +385,43 @@ bool AudioPlugin::SetDefaultDevice(const std::string& device_id) {
 
 double AudioPlugin::GetVolume(const std::string& device_id) {
   std::wstring wide_id = Utf8ToWideString(device_id);
-
   IMMDeviceEnumerator* enumerator = nullptr;
   IMMDevice* device = nullptr;
   IAudioEndpointVolume* endpoint_volume = nullptr;
 
   HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
-                                __uuidof(IMMDeviceEnumerator), (void**)&enumerator);
+                                __uuidof(IMMDeviceEnumerator),
+                                reinterpret_cast<void**>(&enumerator));
   if (FAILED(hr)) return 0.0;
 
-  // If device_id is empty, get default device
   if (device_id.empty()) {
     hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device);
   } else {
     hr = enumerator->GetDevice(wide_id.c_str(), &device);
   }
   enumerator->Release();
-
   if (FAILED(hr) || !device) return 0.0;
 
   hr = device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL,
-                        (void**)&endpoint_volume);
+                        reinterpret_cast<void**>(&endpoint_volume));
   device->Release();
-
   if (FAILED(hr) || !endpoint_volume) return 0.0;
 
   float level = 0.0f;
   endpoint_volume->GetMasterVolumeLevelScalar(&level);
   endpoint_volume->Release();
-
   return static_cast<double>(level);
 }
 
 bool AudioPlugin::SetVolume(const std::string& device_id, double volume) {
   std::wstring wide_id = Utf8ToWideString(device_id);
-
   IMMDeviceEnumerator* enumerator = nullptr;
   IMMDevice* device = nullptr;
   IAudioEndpointVolume* endpoint_volume = nullptr;
 
   HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
-                                __uuidof(IMMDeviceEnumerator), (void**)&enumerator);
+                                __uuidof(IMMDeviceEnumerator),
+                                reinterpret_cast<void**>(&enumerator));
   if (FAILED(hr)) return false;
 
   if (device_id.empty()) {
@@ -452,13 +430,11 @@ bool AudioPlugin::SetVolume(const std::string& device_id, double volume) {
     hr = enumerator->GetDevice(wide_id.c_str(), &device);
   }
   enumerator->Release();
-
   if (FAILED(hr) || !device) return false;
 
   hr = device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL,
-                        (void**)&endpoint_volume);
+                        reinterpret_cast<void**>(&endpoint_volume));
   device->Release();
-
   if (FAILED(hr) || !endpoint_volume) return false;
 
   float level = static_cast<float>(volume);
@@ -467,19 +443,18 @@ bool AudioPlugin::SetVolume(const std::string& device_id, double volume) {
 
   hr = endpoint_volume->SetMasterVolumeLevelScalar(level, NULL);
   endpoint_volume->Release();
-
   return SUCCEEDED(hr);
 }
 
 bool AudioPlugin::GetMute(const std::string& device_id) {
   std::wstring wide_id = Utf8ToWideString(device_id);
-
   IMMDeviceEnumerator* enumerator = nullptr;
   IMMDevice* device = nullptr;
   IAudioEndpointVolume* endpoint_volume = nullptr;
 
   HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
-                                __uuidof(IMMDeviceEnumerator), (void**)&enumerator);
+                                __uuidof(IMMDeviceEnumerator),
+                                reinterpret_cast<void**>(&enumerator));
   if (FAILED(hr)) return false;
 
   if (device_id.empty()) {
@@ -488,31 +463,28 @@ bool AudioPlugin::GetMute(const std::string& device_id) {
     hr = enumerator->GetDevice(wide_id.c_str(), &device);
   }
   enumerator->Release();
-
   if (FAILED(hr) || !device) return false;
 
   hr = device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL,
-                        (void**)&endpoint_volume);
+                        reinterpret_cast<void**>(&endpoint_volume));
   device->Release();
-
   if (FAILED(hr) || !endpoint_volume) return false;
 
   BOOL mute = FALSE;
   endpoint_volume->GetMute(&mute);
   endpoint_volume->Release();
-
   return mute != FALSE;
 }
 
 bool AudioPlugin::SetMute(const std::string& device_id, bool mute) {
   std::wstring wide_id = Utf8ToWideString(device_id);
-
   IMMDeviceEnumerator* enumerator = nullptr;
   IMMDevice* device = nullptr;
   IAudioEndpointVolume* endpoint_volume = nullptr;
 
   HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
-                                __uuidof(IMMDeviceEnumerator), (void**)&enumerator);
+                                __uuidof(IMMDeviceEnumerator),
+                                reinterpret_cast<void**>(&enumerator));
   if (FAILED(hr)) return false;
 
   if (device_id.empty()) {
@@ -521,17 +493,14 @@ bool AudioPlugin::SetMute(const std::string& device_id, bool mute) {
     hr = enumerator->GetDevice(wide_id.c_str(), &device);
   }
   enumerator->Release();
-
   if (FAILED(hr) || !device) return false;
 
   hr = device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL,
-                        (void**)&endpoint_volume);
+                        reinterpret_cast<void**>(&endpoint_volume));
   device->Release();
-
   if (FAILED(hr) || !endpoint_volume) return false;
 
   hr = endpoint_volume->SetMute(mute ? TRUE : FALSE, NULL);
   endpoint_volume->Release();
-
   return SUCCEEDED(hr);
 }
