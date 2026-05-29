@@ -55,5 +55,8 @@ app.*.map.json
 *.obj
 *.pdb
 
+# Logs
+logs/
+
 # Claude Code
 .claude/

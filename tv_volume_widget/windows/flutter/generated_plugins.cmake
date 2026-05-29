@@ -3,8 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  hotkey_manager_windows
-  tray_manager
+  bitsdojo_window_windows
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

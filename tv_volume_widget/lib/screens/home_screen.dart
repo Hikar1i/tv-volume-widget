@@ -195,14 +195,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         children: [
                           Icon(
                             Icons.surround_sound,
-                            color: theme.onSurfaceColor.withOpacity(0.5),
+                            color: theme.onSurface.withOpacity(0.5),
                             size: 18,
                           ),
                           const SizedBox(width: 8),
                           Text(
                             '音频输出设备',
                             style: TextStyle(
-                              color: theme.onSurfaceColor.withOpacity(0.6),
+                              color: theme.onSurface.withOpacity(0.6),
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
                             ),
@@ -211,7 +211,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           Text(
                             '${_devices.length} 个设备',
                             style: TextStyle(
-                              color: theme.onSurfaceColor.withOpacity(0.4),
+                              color: theme.onSurface.withOpacity(0.4),
                               fontSize: 12,
                             ),
                           ),
@@ -229,14 +229,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             children: [
                               Icon(
                                 Icons.speaker_group,
-                                color: theme.onSurfaceColor.withOpacity(0.3),
+                                color: theme.onSurface.withOpacity(0.3),
                                 size: 48,
                               ),
                               const SizedBox(height: 12),
                               Text(
                                 '未检测到音频设备',
                                 style: TextStyle(
-                                  color: theme.onSurfaceColor.withOpacity(0.4),
+                                  color: theme.onSurface.withOpacity(0.4),
                                   fontSize: 16,
                                 ),
                               ),

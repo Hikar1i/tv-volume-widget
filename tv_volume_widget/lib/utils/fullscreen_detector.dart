@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:ffi';
+import 'package:ffi/ffi.dart';
 import 'package:win32/win32.dart';
 
 class FullscreenDetector {
@@ -39,14 +41,15 @@ class FullscreenDetector {
     final hwnd = GetForegroundWindow();
     if (hwnd == 0) return false;
 
-    // Skip our own window
-    final className = StringBuffer();
-    final buffer = StringBuffer(' ' * 256);
-    final length = GetClassName(
-        hwnd, buffer.toString().toNativeUtf16(), 256);
+    // Get window class name to skip our own window
+    final classNameBuffer = calloc.allocate<Utf16>(512);
+    final length = GetClassName(hwnd, classNameBuffer, 256);
     if (length > 0) {
-      final cls = buffer.toString().substring(0, length);
+      final cls = classNameBuffer.toDartString();
+      calloc.free(classNameBuffer);
       if (cls.contains('FLUTTER_RUNNER_WIN32_WINDOW')) return false;
+    } else {
+      calloc.free(classNameBuffer);
     }
 
     // Get window rect
@@ -56,8 +59,8 @@ class FullscreenDetector {
     // Get the monitor this window is on
     final monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
 
-    final monitorInfo = calloc<MONITORINFO>()
-      ..ref.cbSize = sizeOf<MONITORINFO>();
+    final monitorInfo = calloc<MONITORINFO>();
+    monitorInfo.ref.cbSize = sizeOf<MONITORINFO>();
     GetMonitorInfo(monitor, monitorInfo);
 
     // Compare: if window rect matches monitor work area, it's fullscreen
@@ -67,8 +70,8 @@ class FullscreenDetector {
         windowRect.ref.right >= monitorInfo.ref.rcMonitor.right &&
         windowRect.ref.bottom >= monitorInfo.ref.rcMonitor.bottom;
 
-    free(windowRect);
-    free(monitorInfo);
+    calloc.free(windowRect);
+    calloc.free(monitorInfo);
 
     return isFullscreen;
   }

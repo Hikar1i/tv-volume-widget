@@ -6,12 +6,9 @@
 
 #include "generated_plugin_registrant.h"
 
-#include <hotkey_manager_windows/hotkey_manager_windows_plugin_c_api.h>
-#include <tray_manager/tray_manager_plugin.h>
+#include <bitsdojo_window_windows/bitsdojo_window_plugin.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
-  HotkeyManagerWindowsPluginCApiRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("HotkeyManagerWindowsPluginCApi"));
-  TrayManagerPluginRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("TrayManagerPlugin"));
+  BitsdojoWindowPluginRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("BitsdojoWindowPlugin"));
 }
